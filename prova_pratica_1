@@ -1,0 +1,221 @@
+
+
+
+rm(list = ls())
+
+library(plm)
+library(lmtest)
+library(foreign)
+library(sandwich)
+library(stargazer)
+library(tidyverse)
+library(haven)
+
+#----------------------------------------
+#exercício 1 
+
+#criando as matrizes
+y <- matrix(c(3, 14, 20, 22, 23, 33), ncol = 1, nrow = 6, byrow = F)
+x2 <- matrix(c(0, 2, 2, 4, 4, 6), ncol = 1, nrow = 6, byrow = F)
+x3 <- matrix(c(0, 4, 8, 4, 8, 10), ncol = 1, nrow = 6, byrow = F)
+X <- matrix(c(1, 1, 1, 1, 1, 1, 0, 2, 2, 4, 4, 6, 0, 4, 8, 4, 8, 10),  ncol = 3, nrow = 6, byrow = F)
+
+#questão 1A
+XtX <- t(X)%*%X
+
+
+
+
+#questão 1B
+
+xt <- t(X) #x transposta
+
+xtx <- xt %*% X #X'X
+
+xty <- xt%*%y #X'Y
+
+yt <- t(y) #Y transposta
+
+yty <- yt %*% y #Y'Y
+
+invxtx <- solve(xtx) #invertendo X'X
+
+betas <- invxtx %*% xty
+
+betas
+#a equação é: y = 3.688073 + 3.114679X_2 + 1.082569X_3 
+
+#resíduo 
+Xb <- X %*% betas
+Ehat <- y - Xb
+Ehat
+
+#variância
+EhatT <- t(Ehat)
+n<-nrow(y)
+k<-3
+SIGMA2 <- as.numeric((EhatT%*%Ehat)/(n-k))
+
+
+#Matriz de cov var 
+mavcov<-SIGMA2*invxtx
+ep<-sqrt(diag(mavcov))
+ep
+
+ep_beta_1<-ep[1]
+ep_beta_2<-ep[2]
+ep_beta_3<-ep[3]
+cbind(ep_beta_1, ep_beta_2, ep_beta_3)
+
+
+gl<-(6-k)
+qt(0.025, gl)
+Ztab<-abs(qt(0.025, gl))
+
+tbeta2<-((betas[2]-0)/ep_beta_2)
+tbeta2
+
+
+
+
+#1 C - pelo resultado da estatística T, podemos rejeitar a hipótese nula
+
+
+# exercício D
+i.c.inferior<-betas[3]-ep_beta_3*Ztab
+i.c.inferior
+i.c.superior<-betas[3]+ep_beta_3*Ztab
+cbind(i.c.inferior, i.c.superior)
+
+#o intervalo de confiança é influenciado pelo 
+#tamanho da amostra, o nível de confiança e a variancia da população
+
+
+
+# R2
+SQE <- t(betas)%*%xty-n*(mean(y)^2)
+YT <- t(y)
+YTY<-YT%*%y
+SQR <- YTY-t(betas) %*% xty
+SQT <- YTY-n*(mean(y)^2)
+
+cbind(SQE, SQT, SQR)
+
+R2 <- SQE/SQT
+print(R2)
+
+#temos um R2 muito alto, de 98%. Isso significa que a equação explica boa parte do modelo, quase ele todo. 
+
+
+#----------------------------------------
+#exercicio 2
+install.packages("wooldridge")
+library(wooldridge)
+library(plm)
+data(wagepan)
+wagepan.p <- pdata.frame(wagepan, index = "year")
+
+
+regressaoA<- lm(lwage ~ married + educ + hours, data = wagepan.p) #Regressão OLS
+coeftest(regressaoA) #testa os betas estimados
+coeftest(regressao, vcov. = vcovHC) #teste robusto
+confint(regressao, level = .80) #cria os intervalos de confiança 
+
+#2 - A 
+summary(regressaoA)
+#os resultados são dados no comando a cima.  
+
+
+#2 - B
+regressaoB<- (plm(lwage~ married + d86+ d86*educ + educ + hours, data=wagepan.p, model ="pooling" ))
+
+summary(regressaoB)
+#os resultados são dados no comando a cima. 
+
+
+#2 - C
+coeftest(regressaoB, vcov. = vcovHC) #teste robusto
+coeftest(regressaoB) #teste não robusto
+
+#o teste robusto é adaptado para modelos onde
+#há heterocedasticidade. Você pode ver que o desvio padrão no 
+#teste não robusto é maior que no robusto. 
+
+#----------------------------------------
+#exercicio 3
+
+library(tidyverse)
+expectativa <- tibble(
+  patients = c(1:15),
+  y1 = c(10, 12, 8, 5, 7, 4, 5, 11, 5, 4, 9, 10, 4, 13, 5),
+  y2 = c(6, 4, 5, 4, 3, 2, 6, 4, 3, 8, 6, 5, 3, 8, 1))
+
+expectativa <- expectativa %>%
+  mutate(D= c(0, 1, 0, 1, 0, 1, 0, 1, 0 ,1, 0 ,1, 0, 1, 0))
+
+ATE <- mean(expectativa$y1) - mean(expectativa$y2)
+
+#3 - A
+# O efeito tratamento médio é 
+print(ATE)
+
+#3 - B
+tratados <- expectativa %>%
+  filter(D == 1) 
+
+ATT<- mean(tratados$y1) - mean(tratados$y2) 
+#o efeito médio do grupo de tratamento é
+print(ATT)
+
+
+#3 - C
+placebo <- expectativa %>%
+  filter(D == 0) 
+
+ATU<- mean(placebo$y1) - mean(placebo$y2) 
+# o efeito médio do grupo placebo é
+print(ATU)
+
+# 3 - D
+#o medicamento parece ter eficácia considerável em aumentar anos de vida. 
+
+
+
+#----------------------------------------
+#exercicio 4
+
+read_data <- function(df)
+{
+  full_path <- paste("https://raw.github.com/scunning1975/mixtape/master/", 
+                     df, sep = "")
+  df <- read_dta(full_path)
+  return(df)
+}
+
+titanic <- read_data("titanic.dta") %>% 
+  mutate(d = case_when(class == 1 ~ 1, TRUE ~ 0))
+
+ey1 <- titanic %>% 
+  filter(d == 1) %>%
+  pull(survived) %>% 
+  mean()
+
+ey0 <- titanic %>% 
+  filter(d == 0) %>%
+  pull(survived) %>% 
+  mean()
+
+
+sdo <- ey1 - ey0
+#4 - A 
+#a diferença simples é dada por
+print(sdo)
+
+#ou seja, quem é primeira classe tem 35% chance de sobreviver.
+
+#4 - B
+#Esse número dá uma estimativa viesada do ATE porque não 
+#pondera os resultados pelas outra variáveis que o exercício diz que
+#afetavam a chance de sobrevivência -- gênero e idade. 
+
+
